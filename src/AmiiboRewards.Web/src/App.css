@@ -9,6 +9,7 @@
 }
 body { background: var(--bg); }
 :root[data-game-theme="ruins"] { --bg: #1b1815; --panel: #28221c; --raised: #352c23; --line: #524534; --text: #f5eddd; --muted: #c0b19d; --gold: #dfbd80; --green: #d4bd91; --control-hover: #433426; --control-hover-line: #a77b4a; --input: #211a15; --category-active: #423225; --category-active-line: #a27949; --category-icon: #c79b67; --category-count: #b58a59; --search: #251c16; --search-line: #80603d; --card-line: #64482e; --card-hover-line: #bd8b50; --item-image: radial-gradient(ellipse at center, #4a3624, #2a2019); --item-image-text: #c99b64; }
+:root[data-game-theme="plum"] { --bg: #171315; --panel: #231b1e; --raised: #302328; --line: #4c353c; --text: #f6eeef; --muted: #bda8ad; --gold: #f0c36d; --green: #ef8b91; --control-hover: #402a30; --control-hover-line: #a64d59; --input: #1d1518; --category-active: #42252b; --category-active-line: #a84d58; --category-icon: #db737d; --category-count: #c66a73; --search: #27191d; --search-line: #7f3b45; --card-line: #5b343b; --card-hover-line: #c75b67; --item-image: radial-gradient(ellipse at center, #573039, #2b1b20); --item-image-text: #e17b84; }
 :root[data-game-theme="neutral"] { --bg: #181a20; --panel: #22252c; --raised: #30343d; --line: #464c57; --text: #f1f3f7; --muted: #abb2c0; --green: #b6c7e0; }
 .library-state { display: grid; justify-items: center; gap: 17px; text-align: center; margin: 30px 0; padding: 50px 25px; background: var(--panel); border: 1px solid var(--line); border-radius: 15px; }
 .library-state svg { color: var(--green); }
@@ -31,6 +32,12 @@ body { background: var(--bg); }
 :root[data-game-theme="ruins"] .game-copy > p, :root[data-game-theme="ruins"] .game-stats { color: #ded0b7; }
 :root[data-game-theme="ruins"] input, :root[data-game-theme="ruins"] select { background-color: var(--bg); }
 :root[data-game-theme="ruins"] .game-picker select, :root[data-game-theme="ruins"] .locale-control select { background: transparent; }
+:root[data-game-theme="plum"] .game-banner.no-art { background: radial-gradient(ellipse at 88% 10%, #db66765c, transparent 52%), linear-gradient(125deg, #4b1d27, #8b3039); }
+:root[data-game-theme="plum"] .game-banner::before { background: linear-gradient(90deg, #241419ed, #511d2547); }
+:root[data-game-theme="plum"] .game-picker { background: #351820dd; border-color: #ef9aa46b; }
+:root[data-game-theme="plum"] .game-copy > p, :root[data-game-theme="plum"] .game-stats { color: #ead0d4; }
+:root[data-game-theme="plum"] input, :root[data-game-theme="plum"] select { background-color: var(--bg); }
+:root[data-game-theme="plum"] .game-picker select, :root[data-game-theme="plum"] .locale-control select { background: transparent; }
 button, input, select { font: inherit; }
 button, select, summary { cursor: pointer; }
 button { transition: background .15s, border-color .15s, color .15s; }

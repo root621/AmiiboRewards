@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import landscape from './assets/botw-landscape.jpg'
-import { emptyFilters, filterRewards, orderDrops, poolLabels, poolType, progressLabels, progressOf, provider } from './catalog'
+import { costumeProgression, emptyFilters, filterRewards, interactionLabel, isProbabilityMeaningful, orderDrops, poolLabels, poolType, progressLabels, progressOf, provider } from './catalog'
 import type { Filters, Reward } from './catalog'
 import './App.css'
 
 type Game = { code: string; name: string; shortName: string; theme: string; canImport: boolean; dumpAvailable: boolean; romFsPath?: string; rewardCount: number; locales: string[]; coverUrl?: string; status: string }
 const localeLabels: Record<string, string> = { USes: 'Español latinoamericano', EUes: 'Español de España', USen: 'English (US)', EUen: 'English (Europe)' }
 const gameStatus = (game: Game) => game.status === 'ready' ? `${game.rewardCount} objetos disponibles` : game.status === 'importer_pending' ? 'Lector de recompensas pendiente' : 'Listo para importar'
-const categoryIcons: Record<string, string> = { Arcos: 'bow', Armas: 'sword', Escudos: 'shield', Armaduras: 'shield', 'Comida y fauna': 'leaf', Materiales: 'gem', 'Flechas y objetos': 'bow', Otros: 'grid' }
+const categoryIcons: Record<string, string> = { Arcos: 'bow', Armas: 'sword', Escudos: 'shield', Armaduras: 'shield', 'Comida y fauna': 'leaf', Materiales: 'gem', 'Flechas y objetos': 'bow', 'Trajes / Atuendos': 'costume', 'Interacciones amiibo': 'info', Otros: 'grid' }
 
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
@@ -22,6 +22,7 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
     bow: <><path d="M5 3c14 1 15 12 16 16L5 3v18M3 13h15m-3-3 3 3-3 3"/></>,
     sword: <><path d="m4 20 4-4m-2-3 5 5M9 14l9-11 3 0v3L10 17"/></>,
     shield: <path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/>,
+    costume: <path d="m8 4 4 3 4-3 4 3-2 4-2-1v10H8V10l-2 1-2-4Z"/>,
     leaf: <><path d="M20 3C6 2 1 11 6 17s15 0 14-14ZM5 20l11-12"/></>,
     gem: <><path d="m3 8 4-5h10l4 5-9 13ZM3 8h18M7 3l5 18 5-18"/></>,
     info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></>,
@@ -36,16 +37,17 @@ function RewardCard({ reward, dropOrder, game }: { reward: Reward; dropOrder: st
   const shown = expanded ? drops : drops.slice(0, 2)
   const count = new Set(drops.map(provider)).size
   const isContainer = ['Barrel', 'BarrelBomb', 'Kibako_Contain_01', 'Obj_BreakBoxIron'].includes(reward.internalId)
+  const progression = costumeProgression(reward.metadata)
   return <article className="reward-card">
     <div className="reward-heading">
       <div className="item-image">{missingIcon ? <Icon name={categoryIcons[reward.category]} size={32}/> : <img src={`/api/assets/${game.toLowerCase()}/${reward.internalId}?v=rgba2`} alt="" loading="lazy" onError={() => setMissingIcon(true)}/>}</div>
       <div><span className="item-category">{reward.category}</span><h3>{isContainer ? 'Contenedor especial' : reward.name}</h3></div>
     </div>
-    <p className={`description ${expanded ? 'expanded' : ''}`}>{isContainer ? 'Contenedor que puede aparecer como recompensa. No tiene una descripción de objeto en los textos del juego.' : reward.description || 'Este objeto no tiene una descripción disponible en el idioma seleccionado.'}</p>
+    <p className={`description ${expanded ? 'expanded' : ''}`}>{isContainer ? 'Contenedor que puede aparecer como recompensa. No tiene una descripción de objeto en los textos del juego.' : reward.description || 'Este objeto no tiene una descripción disponible en el idioma seleccionado.'}{progression && <><br/><br/>{progression}</>}</p>
     <div className="providers-heading"><span>QUIÉN LO ENTREGA</span><span>{count} {drops.some(drop => /^\d{3}$/.test(provider(drop))) ? 'grupos o tablas' : 'amiibo'}</span></div>
     <div className="drops">{shown.map((drop, index) => <div className="drop" key={`${drop.name}-${drop.pool}-${index}`}>
       <div><strong>{provider(drop)}</strong><span>{poolLabels[poolType(drop.pool)] ?? 'Premio'}{drop.minCount != null && <small> · {drop.minCount === drop.maxCount ? `${drop.minCount} entrega${drop.minCount === 1 ? '' : 's'}` : `${drop.minCount}–${drop.maxCount} entregas`}</small>}{progressOf(drop) && <small> · {progressLabels[progressOf(drop)] ?? 'Condición del juego'}</small>}{drop.condition && <small> · condicional</small>}</span></div>
-      {drop.isSpecial ? <b title="Resultado especial">Especial</b> : <b title="Probabilidad de esta recompensa">{drop.probability.toLocaleString('es')}<small>%</small></b>}
+      {drop.isSpecial ? <b title="Resultado especial">Especial</b> : isProbabilityMeaningful(drop) ? <b title="Probabilidad de esta recompensa">{drop.probability.toLocaleString('es')}<small>%</small></b> : <b title="Interacción determinista">{interactionLabel(drop)}</b>}
     </div>)}</div>
     <button className="expand-drops" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>{expanded ? 'Ver menos' : drops.length > 2 ? `Ver ${drops.length - 2} ${drops.length === 3 ? 'posibilidad más' : 'posibilidades más'}` : 'Ver descripción completa'}<Icon name="down" size={15}/></button>
   </article>
@@ -70,6 +72,8 @@ function App() {
   const [dumpMessage, setDumpMessage] = useState('')
   const [configLoading, setConfigLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importMessage, setImportMessage] = useState('')
   const dialogRef = useRef<HTMLDialogElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const sidebarRef = useRef<HTMLElement>(null)
@@ -174,7 +178,43 @@ function App() {
     finally { setSaving(false) }
   }
 
-  const displayed = useMemo(() => filterRewards(catalog, filters, order), [catalog, filters, order])
+  async function triggerImport(gameCode: string) {
+    if (!gameCode) return;
+    setImporting(true); setImportMessage('');
+    try {
+      const response = await fetch('/api/dumps/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: gameCode, locale: activeLocale })
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'No se pudo iniciar la importación.');
+      setImportMessage('Importación iniciada. Esperando los resultados…');
+      for (let attempt = 0; attempt < 60; attempt++) {
+        await new Promise(resolve => window.setTimeout(resolve, 1000));
+        const library = await fetch('/api/games');
+        if (!library.ok) continue;
+        const updated: Game[] = await library.json();
+        const imported = updated.find(game => game.code === gameCode);
+        if (imported && imported.rewardCount > 0) {
+          updateLibrary(updated);
+          setReload(value => value + 1);
+          setImportMessage('Importación completada. El catálogo ya está disponible.');
+          return;
+        }
+      }
+      setImportMessage('La importación sigue en curso. Volvé a explorar la biblioteca en unos segundos.');
+    } catch (reason) {
+      setImportMessage(reason instanceof Error ? reason.message : 'No se pudo iniciar la importación.');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  const hasProbability = catalog.some(item => item.amiibo.some(isProbabilityMeaningful))
+  const effectiveOrder = !hasProbability && order === 'chance' ? 'name' : order
+  const effectiveDropOrder = !hasProbability && dropOrder === 'chance' ? 'amiibo' : dropOrder
+  const displayed = useMemo(() => filterRewards(catalog, filters, effectiveOrder), [catalog, filters, effectiveOrder])
   const categories = [...new Set(catalog.map(item => item.category))].sort((a, b) => a.localeCompare(b, 'es'))
   const amiibos = [...new Set(catalog.flatMap(item => item.amiibo.map(drop => provider(drop))))].sort((a, b) => a.localeCompare(b, 'es'))
   const amiiboCount = amiibos.filter(name => !/^\d{3}$/.test(name)).length
@@ -208,7 +248,7 @@ function App() {
         <label className="game-picker"><span>Juego seleccionado</span><select aria-label="Juego seleccionado" disabled={!games.length} value={selectedGame} onChange={event => { setSelectedGame(event.target.value); setFiltersOpen(false); reset() }}>{games.length ? games.map(game => <option key={game.code} value={game.code}>{game.shortName}</option>) : <option value="">Sin juegos registrados</option>}</select></label>
       </section>
 
-      {!selected || selected.rewardCount === 0 ? <section className="library-state" id="catalog"><Icon name={selected?.status === 'importer_pending' ? 'settings' : 'grid'} size={34}/><h2>{libraryLoading ? 'Buscando tus juegos…' : selected?.status === 'importer_pending' ? `${selected.shortName} detectado` : selected ? 'Juego registrado en tu biblioteca' : 'Agregá tu primer juego'}</h2><p>{libraryLoading ? 'Leyendo la biblioteca y la carpeta de dumps.' : selected?.status === 'importer_pending' ? 'Podés seleccionarlo y conservarlo en la biblioteca. Su formato de recompensas necesita un lector específico que aún no está implementado; todavía no hay objetos importados para este juego.' : selected ? 'La RomFS está identificada. Importá sus recompensas para habilitar el catálogo.' : libraryMessage || 'Configurá la carpeta de RomFS extraídas y explorala para registrar los juegos.'}</p>{selectedGame === 'TOTK' && !cover && <small>Imagen del juego pendiente. Se muestra su tema de respaldo.</small>}<button onClick={openSettings}>Administrar biblioteca</button></section> : <div className="workspace" id="catalog">
+      {!selected || selected.rewardCount === 0 ? <section className="library-state" id="catalog"><Icon name={selected?.status === 'importer_pending' ? 'settings' : 'grid'} size={34}/><h2>{libraryLoading ? 'Buscando tus juegos…' : selected?.status === 'importer_pending' ? `${selected.shortName} detectado` : selected ? 'Juego registrado en tu biblioteca' : 'Agregá tu primer juego'}</h2><p>{libraryLoading ? 'Leyendo la biblioteca y la carpeta de dumps.' : selected?.status === 'importer_pending' ? 'Podés seleccionarlo y conservarlo en la biblioteca. Su formato de recompensas necesita un lector específico que aún no está implementado; todavía no hay objetos importados para este juego.' : selected ? 'La RomFS está identificada. Importá sus recompensas para habilitar el catálogo.' : libraryMessage || 'Configurá la carpeta de RomFS extraídas y explorala para registrar los juegos.'}</p>{selectedGame === 'TOTK' && !cover && <small>Imagen del juego pendiente. Se muestra su tema de respaldo.</small>}{selected?.canImport && <div className="library-actions"><button onClick={() => triggerImport(selected.code)} disabled={importing}>{importing ? 'Importando…' : `Importar ${selected.shortName}`}</button>{importMessage && <p role="status" className="dump-message">{importMessage}</p>}</div>}<button onClick={openSettings}>Administrar biblioteca</button></section> : <div className="workspace" id="catalog">
         <aside ref={sidebarRef} className={`filter-sidebar ${filtersOpen ? 'is-open' : ''}`} id="catalog-filters" aria-label="Filtros del catálogo">
           <div className="filter-title"><h2><Icon name="filter" size={18}/>Filtros</h2><button className="text-button" onClick={reset} disabled={!chips.length}>Limpiar</button></div>
           <fieldset className="category-filter"><legend>Categoría</legend>
@@ -219,7 +259,7 @@ function App() {
             <label>Amiibo<select value={filters.amiibo} onChange={event => changeFilter('amiibo', event.target.value)}><option value="">Todos los amiibo</option>{amiibos.map(name => <option key={name} value={name}>{/^\d{3}$/.test(name) ? `Tabla sin identificar (${name})` : name}</option>)}</select></label>
             <label>Tipo de recompensa<select value={filters.pool} onChange={event => changeFilter('pool', event.target.value)}><option value="">Todas las recompensas</option>{Object.entries(poolLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label>
             <label>Etapa del juego<select value={filters.progress} onChange={event => changeFilter('progress', event.target.value)}><option value="">Todas las etapas</option>{Object.entries(progressLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select><small>Incluye objetos sin condición de progreso.</small></label>
-            <label>Probabilidad mínima<select value={filters.minimum} onChange={event => changeFilter('minimum', Number(event.target.value))}><option value="0">Cualquier probabilidad</option>{[10, 30, 50, 100].map(value => <option key={value} value={value}>{value}% o más</option>)}</select></label>
+            {hasProbability && <label>Probabilidad mínima<select value={filters.minimum} onChange={event => changeFilter('minimum', Number(event.target.value))}><option value="0">Cualquier probabilidad</option>{[10, 30, 50, 100].map(value => <option key={value} value={value}>{value}% o más</option>)}</select></label>}
           </div>
           <p className="filter-hint"><Icon name="info" size={16}/>Los filtros se combinan y se aplican al instante.</p>
           <button className="apply-mobile-filters" onClick={closeFilters}>Ver {displayed.length} objetos<Icon name="arrow" size={17}/></button>
@@ -235,15 +275,15 @@ function App() {
           <div className="results-toolbar">
             <button className="mobile-filters" aria-expanded={filtersOpen} aria-controls="catalog-filters" onClick={toggleFilters}><Icon name="filter" size={17}/>Filtros {chips.length > 0 && `(${chips.length})`}</button>
             <p role="status" aria-live="polite">{loading ? 'Cargando objetos…' : <><b>{displayed.length}</b> {displayed.length === 1 ? 'objeto' : 'objetos'}<span> de {catalog.length}</span></>}</p>
-            <label className="sort-control">Ordenar<select value={order} onChange={event => { setOrder(event.target.value); setLimit(12) }}><option value="name">Nombre A–Z</option><option value="chance">Mayor probabilidad</option><option value="amiibo">Más amiibo</option></select></label>
+            <label className="sort-control">Ordenar<select value={effectiveOrder} onChange={event => { setOrder(event.target.value); setLimit(12) }}><option value="name">Nombre A–Z</option>{hasProbability && <option value="chance">Mayor probabilidad</option>}<option value="amiibo">Más amiibo</option></select></label>
           </div>
           {chips.length > 0 && <div className="active-filters" aria-label="Filtros activos">{chips.map(chip => <button key={chip.key} onClick={() => changeFilter(chip.key, chip.key === 'minimum' ? 0 : '')} aria-label={`Quitar filtro ${chip.label}`}>{chip.label}<Icon name="close" size={13}/></button>)}<button className="reset-filters" onClick={reset}>Limpiar todo</button></div>}
-          <div className="probability-bar"><details><summary><Icon name="info" size={15}/>Cómo leer los porcentajes</summary><p>Cada porcentaje corresponde al objeto dentro de su lista de recompensas, no a la probabilidad total de un escaneo. Las etapas y los tipos de premio son condiciones distintas; sus porcentajes no se suman.</p></details><label>Posibilidades<select aria-label="Orden de posibilidades" value={dropOrder} onChange={event => setDropOrder(event.target.value)}><option value="chance">Mayor % primero</option><option value="amiibo">Por amiibo</option><option value="pool">Por tipo de premio</option></select></label></div>
+          <div className="probability-bar">{hasProbability && <details><summary><Icon name="info" size={15}/>Cómo leer los porcentajes</summary><p>Cada porcentaje corresponde al objeto dentro de su lista de recompensas, no a la probabilidad total de un escaneo. Las etapas y los tipos de premio son condiciones distintas; sus porcentajes no se suman.</p></details>}<label>{hasProbability ? 'Posibilidades' : 'Interacciones'}<select aria-label="Orden de posibilidades" value={effectiveDropOrder} onChange={event => setDropOrder(event.target.value)}>{hasProbability && <option value="chance">Mayor % primero</option>}<option value="amiibo">Por amiibo</option><option value="pool">Por tipo de premio</option></select></label></div>
 
           {loading ? <div className="results skeletons" aria-hidden="true">{Array.from({ length: 6 }, (_, i) => <div className="skeleton-card" key={i}><div/><span/><span/><span/></div>)}</div> :
             error ? <div className="empty-state" role="alert"><Icon name="info" size={32}/><h3>No pudimos mostrar el catálogo</h3><p>{error}</p><button onClick={() => setReload(value => value + 1)}>Reintentar</button></div> :
             displayed.length === 0 ? <div className="empty-state"><Icon name="search" size={36}/><h3>{catalog.length ? 'No encontramos coincidencias' : 'Tu catálogo todavía está vacío'}</h3><p>{catalog.length ? 'Probá con otro nombre o quitá un filtro para ampliar la búsqueda.' : 'Importá los datos de un juego para explorar sus recompensas.'}</p>{catalog.length > 0 && <button onClick={reset}>Ver todos los objetos</button>}</div> :
-            <><div className="results">{displayed.slice(0, limit).map(reward => <RewardCard key={`${selectedGame}-${locale}-${reward.internalId}-${JSON.stringify(filters)}`} reward={reward} dropOrder={dropOrder} game={selectedGame}/>)}</div><div className="pagination"><span>Mostrando {Math.min(limit, displayed.length)} de {displayed.length} objetos</span>{limit < displayed.length && <button onClick={() => setLimit(value => value + 12)}>Mostrar más objetos<Icon name="down" size={16}/></button>}</div></>}
+            <><div className="results">{displayed.slice(0, limit).map(reward => <RewardCard key={`${selectedGame}-${locale}-${reward.internalId}-${JSON.stringify(filters)}`} reward={reward} dropOrder={effectiveDropOrder} game={selectedGame}/>)}</div><div className="pagination"><span>Mostrando {Math.min(limit, displayed.length)} de {displayed.length} objetos</span>{limit < displayed.length && <button onClick={() => setLimit(value => value + 12)}>Mostrar más objetos<Icon name="down" size={16}/></button>}</div></>}
         </section>
       </div>}
     </main>

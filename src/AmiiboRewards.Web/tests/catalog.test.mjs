@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import ts from 'typescript'
 
 const compiled = ts.transpileModule(readFileSync(new URL('../src/catalog.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
-const { emptyFilters, filterRewards, orderDrops, provider } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
+const { costumeProgression, emptyFilters, filterRewards, interactionLabel, isProbabilityMeaningful, orderDrops, provider } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 
 const traveler = { internalId: 'Weapon_Bow_001', name: 'Arco de viajero', description: 'Un arco pequeño.', category: 'Arcos', amiiboCount: 2, amiibo: [
   { name: 'Link arquero', pool: 'BigHit(Normal)', probability: 30 },
@@ -64,4 +64,14 @@ test('cada amiibo concreto llega como una fila independiente, nunca un nombre un
 test('la etiqueta principal de probabilidad nunca incluye "peso"', () => {
   const drop = { amiiboDisplayName: 'Link', pool: 'Normal', probability: 100, rawWeight: 60 }
   assert.doesNotMatch(`${drop.probability}%`, /peso/)
+})
+test('los desbloqueos deterministas no usan semántica de probabilidad', () => {
+  const unlock = { interactionKind: 1, pool: 'AmiiboUnlock', probability: 0 }
+  assert.equal(isProbabilityMeaningful(unlock), false)
+  assert.equal(interactionLabel(unlock), 'Desbloqueo garantizado')
+  assert.equal(isProbabilityMeaningful({ interactionKind: 0, pool: 'Normal', probability: 25 }), true)
+})
+test('la progresión normal de atuendos se distingue del desbloqueo anticipado', () => {
+  const metadata = JSON.stringify({ NormalRoutes: [{ ItemType: 'Cap', MoonNum: 160, Price: 100 }, { ItemType: 'Clothes', MoonNum: 180, Price: 200 }] })
+  assert.equal(costumeProgression(metadata), 'El amiibo lo desbloquea antes. Ruta normal: gorra: 160 energilunas y 100 monedas; traje: 180 energilunas y 200 monedas.')
 })

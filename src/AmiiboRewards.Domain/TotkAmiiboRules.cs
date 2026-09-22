@@ -46,10 +46,25 @@ public static class TotkAmiiboRuleMatcher
     public static bool MatchesSelector(TotkSelectorKind kind, string value, AmiiboCatalogEntry entry) => kind switch
     {
         TotkSelectorKind.NumberingId => ushort.TryParse(value, out var numberingId) && entry.NumberingId == numberingId,
-        TotkSelectorKind.CharacterId => CharacterIds.TryGetValue(value, out var characterId) && entry.CharacterId.Equals(AmiiboCatalogImporter.Format(characterId), StringComparison.OrdinalIgnoreCase),
+        TotkSelectorKind.CharacterId => MatchesCharacterId(value, entry),
         TotkSelectorKind.CharacterBaseId => CharacterBases.TryGetValue(value, out var characterBaseId) && entry.CharacterBaseId.Equals(AmiiboCatalogImporter.Format(characterBaseId), StringComparison.OrdinalIgnoreCase),
         _ => false
     };
+
+    private static bool MatchesCharacterId(string value, AmiiboCatalogEntry entry)
+    {
+        if (ushort.TryParse(value, out var numericId))
+        {
+            var bytes = entry.CharacterId.Split('-');
+            return bytes.Length >= 2
+                && byte.TryParse(bytes[0], System.Globalization.NumberStyles.HexNumber, null, out var low)
+                && byte.TryParse(bytes[1], System.Globalization.NumberStyles.HexNumber, null, out var high)
+                && (ushort)(low | high << 8) == numericId;
+        }
+
+        return CharacterIds.TryGetValue(value, out var characterId)
+            && entry.CharacterId.Equals(AmiiboCatalogImporter.Format(characterId), StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>Human-readable fallback used only when a selector has no concrete local catalog match.</summary>
     public static readonly IReadOnlyDictionary<string, string> FamilyDisplayNames = new Dictionary<string, string>(StringComparer.Ordinal)

@@ -69,7 +69,10 @@ public static class GameProfiles
     public static readonly GameProfile Totk = new("TOTK", "0100F2C0115B6000", "The Legend of Zelda: Tears of the Kingdom", "Tears of the Kingdom", "ruins",
         ["Pack/ZsDic.pack.zs", "Pack/ResidentCommon.pack.zs"], "totk-byml", ["Mals/{locale}.Product.*.sarc.zs"], ["UI", "TexToGo"])
     { SemanticSourcePaths = ["Pack/ResidentCommon.pack.zs::Game/AmiiboSetting/AmiiboSetting.game__ui__AmiiboSetting.bgyml"], LocalizationGroupHints = ["ActorMsg", "ActorMsg/PouchContent", "ActorMsg/PictureBook"] };
-    public static readonly IReadOnlyList<GameProfile> All = [Botw, Totk];
+    public static readonly GameProfile Odyssey = new("ODYSSEY", "0100000000010000", "Super Mario Odyssey", "Super Mario Odyssey", "plum",
+        ["SystemData/ItemList.szs"], "odyssey-byml", ["LocalizedData/{locale}/MessageData"], ["ObjectData"])
+    { SemanticSourcePaths = ["SystemData/ItemList.szs"], LocalizationGroupHints = ["LocalizedData", "MessageData"] };
+    public static readonly IReadOnlyList<GameProfile> All = [Botw, Totk, Odyssey];
     public static GameProfile? Find(string code) => All.FirstOrDefault(x => x.Code.Equals(code, StringComparison.OrdinalIgnoreCase));
 }
 

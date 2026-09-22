@@ -9,7 +9,8 @@ public static class GameDefinitions
 {
     public static readonly GameDefinition Botw = new(GameProfiles.Botw.Code, GameProfiles.Botw.Name, GameProfiles.Botw.ShortName, GameProfiles.Botw.Theme, true);
     public static readonly GameDefinition Totk = new(GameProfiles.Totk.Code, GameProfiles.Totk.Name, GameProfiles.Totk.ShortName, GameProfiles.Totk.Theme, true);
-    public static GameDefinition? Find(string code) => code.ToUpperInvariant() switch { "BOTW" => Botw, "TOTK" => Totk, _ => null };
+    public static readonly GameDefinition Odyssey = new(GameProfiles.Odyssey.Code, GameProfiles.Odyssey.Name, GameProfiles.Odyssey.ShortName, GameProfiles.Odyssey.Theme, true);
+    public static GameDefinition? Find(string code) => code.ToUpperInvariant() switch { "BOTW" => Botw, "TOTK" => Totk, "ODYSSEY" => Odyssey, _ => null };
 
     public static DetectedRomFs? Detect(string directory)
     {
@@ -18,9 +19,10 @@ public static class GameDefinitions
         var botw = Path.Combine(root, "Actor", "Pack");
         if (Directory.Exists(botw) && Directory.EnumerateFiles(botw, "Item_Amiibo_DropTable_*.sbactorpack").Any())
             return new(Botw, Path.GetFullPath(root));
-        // Require independent content markers, not the folder name or a title id.
         if (GameProfiles.Totk.RequiredRomFsMarkers.All(marker => File.Exists(Path.Combine(root, marker.Replace('/', Path.DirectorySeparatorChar)))))
             return new(Totk, Path.GetFullPath(root));
+        if (GameProfiles.Odyssey.RequiredRomFsMarkers.All(marker => File.Exists(Path.Combine(root, marker.Replace('/', Path.DirectorySeparatorChar)))))
+            return new(Odyssey, Path.GetFullPath(root));
         return null;
     }
 

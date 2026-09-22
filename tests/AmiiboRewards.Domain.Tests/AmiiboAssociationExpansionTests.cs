@@ -128,4 +128,28 @@ public sealed class AmiiboAssociationExpansionTests
         Assert.Equal("Link (Wind Waker)", Assert.Single(result[1]).DisplayName);
         Assert.Equal("Toon Link", Assert.Single(result[2]).DisplayName);
     }
+
+    [Fact]
+    public void Odyssey_numeric_character_id_expands_family_and_respects_exact_selector_precedence()
+    {
+        var catalog = new[]
+        {
+            Entry("/a/mario.bin", "Mario", "00-00-00", "00-00", 52),
+            Entry("/a/mario-gold.bin", "Mario (Gold Edition)", "00-00-00", "00-00", 57),
+            Entry("/a/mario-wedding.bin", "Mario (Wedding)", "00-00-00", "00-00", 881),
+            Entry("/a/luigi.bin", "Luigi", "00-01-00", "00-01", 53),
+        };
+        var selectors = new List<(int Key, TotkSelectorKind? Kind, string Value)>
+        {
+            (1, TotkSelectorKind.NumberingId, "881"),
+            (2, TotkSelectorKind.CharacterId, "0"),
+            (3, TotkSelectorKind.CharacterId, "256"),
+        };
+
+        var result = AmiiboAssociationExpansion.ExpandGroup(selectors, catalog);
+
+        Assert.Equal("Mario (Wedding)", Assert.Single(result[1]).DisplayName);
+        Assert.Equal(["Mario", "Mario (Gold Edition)"], result[2].Select(x => x.DisplayName).ToList());
+        Assert.Equal("Luigi", Assert.Single(result[3]).DisplayName);
+    }
 }

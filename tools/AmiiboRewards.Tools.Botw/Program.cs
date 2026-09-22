@@ -8,7 +8,7 @@ using AmiiboRewards.Tools.Botw;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-if (args.Length < 1) { Console.WriteLine("Commands: import-romfs [locale], import-totk-romfs [locale], import-amiibo-bins <directory>, diagnose-totk-selectors <directory>, inspect-totk-romfs, inspect-totk-localization <locale>, analyze-romfs --romfs <path>, import-json <enriched-drops.json>, import-amiibo-catalog <catalog.json>, import-localization <locale>, unresolved-localization <locale>, find-localization <locale> <fragment>, inspect-localization <locale> <label>, inspect-pack <sbactorpack>, extract-bdrop <sbactorpack> <entry> <output>, parse-aamp <bdrop>, validate"); return 0; }
+if (args.Length < 1) { Console.WriteLine("Commands: import-romfs [locale], import-totk-romfs [locale], import-odyssey-romfs [locale], import-amiibo-bins <directory>, diagnose-totk-selectors <directory>, inspect-totk-romfs, inspect-totk-localization <locale>, inspect-odyssey-localization <locale> [fragment], inspect-odyssey-archive <relative-path> [fragment], analyze-romfs --romfs <path>, import-json <enriched-drops.json>, import-amiibo-catalog <catalog.json>, import-localization <locale>, unresolved-localization <locale>, find-localization <locale> <fragment>, inspect-localization <locale> <label>, inspect-pack <sbactorpack>, extract-bdrop <sbactorpack> <entry> <output>, parse-aamp <bdrop>, validate"); return 0; }
 var connection = Environment.GetEnvironmentVariable("AMIIBOREWARDS_ConnectionStrings__AmiiboRewards") ?? "Host=localhost;Port=5432;Database=amiibo_rewards;Username=amiibo;Password=amiibo";
 var options = new DbContextOptionsBuilder<AmiiboRewardsDbContext>().UseNpgsql(connection).Options;
 using var lf = LoggerFactory.Create(b => b.AddSimpleConsole(o => o.SingleLine = true)); var log = lf.CreateLogger("Botw"); await using var db = new AmiiboRewardsDbContext(options);
@@ -32,6 +32,12 @@ if (args[0] == "import-totk-romfs" && args.Length is 1 or 2)
     if (string.IsNullOrWhiteSpace(romFs)) { Console.Error.WriteLine("Set AMIIBOREWARDS_Totk__RomFsPath to the TOTK RomFS directory."); return 2; }
     return await ImportTotkRomFsAsync(romFs, args.Length == 2 ? args[1] : "USen", db, log);
 }
+if (args[0] == "import-odyssey-romfs" && args.Length is 1 or 2)
+{
+    var romFs = Environment.GetEnvironmentVariable("AMIIBOREWARDS_Odyssey__RomFsPath");
+    if (string.IsNullOrWhiteSpace(romFs)) { Console.Error.WriteLine("Set AMIIBOREWARDS_Odyssey__RomFsPath to the Odyssey RomFS directory."); return 2; }
+    return await ImportOdysseyRomFsAsync(romFs, args.Length == 2 ? args[1] : "USen", db, log);
+}
 if (args[0] == "inspect-totk-romfs" && args.Length == 1)
 {
     var romFs = Environment.GetEnvironmentVariable("AMIIBOREWARDS_Totk__RomFsPath");
@@ -42,6 +48,33 @@ if (args[0] == "inspect-totk-localization" && args.Length is 2 or 3)
 {
     var romFs = Environment.GetEnvironmentVariable("AMIIBOREWARDS_Totk__RomFsPath"); if (string.IsNullOrWhiteSpace(romFs)) return 2;
     var messages = await TotkMessageCatalogReader.ReadAsync(romFs, args[1]); var matches = args.Length == 3 ? messages.Where(x => x.Key.Contains(args[2], StringComparison.OrdinalIgnoreCase) || x.Value.Contains(args[2], StringComparison.OrdinalIgnoreCase)) : messages.Take(5); Console.WriteLine($"{messages.Count} actor message labels"); foreach (var item in matches.Take(50)) Console.WriteLine($"{item.Key} = {item.Value}"); return 0;
+}
+if (args[0] == "inspect-odyssey-localization" && args.Length is 2 or 3)
+{
+    var romFs = Environment.GetEnvironmentVariable("AMIIBOREWARDS_Odyssey__RomFsPath"); if (string.IsNullOrWhiteSpace(romFs)) return 2;
+    var messages = await OdysseyMessageCatalogReader.ReadAsync(romFs, args[1]);
+    var matches = args.Length == 3 ? messages.Where(x => x.Label.Contains(args[2], StringComparison.OrdinalIgnoreCase) || x.Text.Contains(args[2], StringComparison.OrdinalIgnoreCase)) : messages.Take(5);
+    Console.WriteLine($"{messages.Count} Odyssey message labels");
+    foreach (var item in matches.Take(100)) Console.WriteLine($"{item.ArchivePath}::{item.MsbtPath}::{item.Label} = {item.Text.Replace('\n', ' ')}");
+    return 0;
+}
+if (args[0] == "inspect-odyssey-archive" && args.Length is 2 or 3)
+{
+    var romFs = Environment.GetEnvironmentVariable("AMIIBOREWARDS_Odyssey__RomFsPath"); if (string.IsNullOrWhiteSpace(romFs)) return 2;
+    var archivePath = Path.Combine(romFs, args[1]);
+    var archive = SwitchArchive.DecodeCompression(await File.ReadAllBytesAsync(archivePath));
+    var fragment = args.Length == 3 ? args[2] : null;
+    foreach (var name in SwitchArchive.ReadNames(archive))
+    {
+        Console.WriteLine(name);
+        if (!name.EndsWith(".byml", StringComparison.OrdinalIgnoreCase)) continue;
+        foreach (var map in EnumerateBymlMaps(BymlReader.ReadAny(SwitchArchive.Extract(archive, name))))
+        {
+            var json = JsonSerializer.Serialize(map);
+            if (fragment is null || json.Contains(fragment, StringComparison.OrdinalIgnoreCase)) Console.WriteLine($"  {json}");
+        }
+    }
+    return 0;
 }
 if (args[0] == "analyze-romfs" && args.Length is 2 or 3) return AnalyzeRomFs(args.Length == 3 && args[1] == "--romfs" ? args[2] : args[1]);
 if (args[0] == "inspect-localization" && args.Length == 3) return await InspectLocalizationAsync(args[1], args[2]);
@@ -104,6 +137,230 @@ static async Task<int> ImportRomFsAsync(string romFs, string locale, AmiiboRewar
     }
     catch (Exception ex) { run.Status = ImportStatus.Failed; run.FinishedAt = DateTimeOffset.UtcNow; run.Summary = ex.Message; await db.SaveChangesAsync(); log.LogError(ex, "RomFS AAMP import failed"); return 1; }
 }
+static async Task<int> ImportOdysseyRomFsAsync(string romFs, string locale, AmiiboRewardsDbContext db, ILogger log)
+{
+    var archivePath = Path.Combine(romFs, "SystemData", "ItemList.szs");
+    if (!File.Exists(archivePath)) { Console.Error.WriteLine($"Odyssey ItemList archive not found: {archivePath}"); return 2; }
+
+    var raw = await File.ReadAllBytesAsync(archivePath);
+    var decoded = SwitchArchive.DecodeCompression(raw);
+    var names = SwitchArchive.ReadNames(decoded);
+    var hash = Convert.ToHexString(SHA256.HashData(raw)).ToLowerInvariant();
+    var sourceRoot = Path.GetFullPath(romFs);
+
+    await db.Database.MigrateAsync();
+    var game = await db.Games.SingleOrDefaultAsync(x => x.Code == "ODYSSEY");
+    if (game is null) { game = new Game { Code = "ODYSSEY", Name = GameProfiles.Odyssey.Name, RomFsPath = sourceRoot, LastDetectedAt = DateTimeOffset.UtcNow }; db.Games.Add(game); await db.SaveChangesAsync(); }
+    else { game.RomFsPath = sourceRoot; game.LastDetectedAt = DateTimeOffset.UtcNow; }
+
+    var run = await db.ImportRuns.SingleOrDefaultAsync(x => x.GameId == game.Id && x.Kind == "odyssey-itemlist-byml" && x.SourceSha256 == hash);
+    if (run is null) { run = new ImportRun { GameId = game.Id, Kind = "odyssey-itemlist-byml", SourcePath = archivePath, SourceSha256 = hash, Status = ImportStatus.Running }; db.ImportRuns.Add(run); }
+    else { run.Status = ImportStatus.Running; run.FinishedAt = null; run.Summary = null; }
+    await db.SaveChangesAsync();
+
+    try
+    {
+        var rules = names
+            .Where(x => x.EndsWith("ItemCap.byml", StringComparison.OrdinalIgnoreCase) || x.EndsWith("ItemCloth.byml", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(archiveName => ReadOdysseyRules(SwitchArchive.Extract(decoded, archiveName), archiveName))
+            .ToList();
+        var itemListName = names.Single(x => Path.GetFileName(x).Equals("ItemList.byml", StringComparison.OrdinalIgnoreCase));
+        var progression = ReadOdysseyProgression(SwitchArchive.Extract(decoded, itemListName));
+
+        await db.AmiiboRewards.Where(x => x.Amiibo!.GameId == game.Id).ExecuteDeleteAsync();
+        await db.Amiibo.Where(x => x.GameId == game.Id).ExecuteDeleteAsync();
+        await db.Rewards.Where(x => x.GameId == game.Id).ExecuteDeleteAsync();
+
+        var bundles = rules.GroupBy(x => x.Rule.ItemName, StringComparer.OrdinalIgnoreCase).ToList();
+        var selectors = new Dictionary<string, Amiibo>(StringComparer.Ordinal);
+        foreach (var bundle in bundles)
+        {
+            var components = bundle.Select(x => x.ComponentType).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+            var normalRoutes = progression.GetValueOrDefault(bundle.Key) ?? [];
+            var reward = new Reward
+            {
+                GameId = game.Id,
+                InternalId = bundle.Key,
+                Name = bundle.Key,
+                RewardType = RewardType.CostumeUnlock,
+                Metadata = JsonSerializer.Serialize(new OdysseyCostumeMetadata(components, normalRoutes)),
+                NameSourcePath = archivePath,
+                NameSourceSha256 = hash
+            };
+            db.Rewards.Add(reward);
+
+            var sourceOrder = 0;
+            foreach (var entry in bundle.GroupBy(x => (x.Rule.CharacterId, x.Rule.NumberingId)).Select(x => x.First()))
+            {
+                var selector = entry.Rule.NumberingId is int numberingId ? $"NumberingID_{numberingId}" : $"CharacterID_{entry.Rule.CharacterId}";
+                if (!selectors.TryGetValue(selector, out var amiibo))
+                {
+                    amiibo = new Amiibo { GameId = game.Id, InternalTableId = selector, Name = OdysseySelectorDisplayName(entry.Rule), MappingStatus = AmiiboMappingStatus.Confirmed, MappingSource = "Odyssey ItemCap/ItemCloth Amiibo rule" };
+                    db.Amiibo.Add(amiibo);
+                    selectors.Add(selector, amiibo);
+                }
+                db.AmiiboRewards.Add(new AmiiboReward
+                {
+                    Amiibo = amiibo,
+                    Reward = reward,
+                    Pool = "AmiiboUnlock",
+                    Probability = 0,
+                    DropSourcePath = $"SystemData/ItemList.szs::{entry.SourceId}",
+                    DropSourceSha256 = hash,
+                    EntryIndex = sourceOrder++,
+                    InteractionKind = InteractionKind.Unlock,
+                    OutcomeKind = OutcomeKind.CostumeUnlock
+                });
+            }
+        }
+
+        const string amiiboNpcSource = "EventData/AmiiboNpc.szs::AmiiboNpc.byml";
+        var amiiboNpcArchive = Path.Combine(romFs, "EventData", "AmiiboNpc.szs");
+        var amiiboNpcHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(amiiboNpcArchive))).ToLowerInvariant();
+        var anyAmiibo = new Amiibo { GameId = game.Id, InternalTableId = "AnyAmiibo", Name = "Cualquier amiibo", MappingStatus = AmiiboMappingStatus.Confirmed, MappingSource = amiiboNpcSource };
+        var hintSearch = new Reward
+        {
+            GameId = game.Id,
+            InternalId = "AmiiboPowerMoonHintSearch",
+            Name = "AmiiboPowerMoonHintSearch",
+            RewardType = RewardType.Event,
+            NameSourcePath = amiiboNpcSource,
+            NameSourceSha256 = amiiboNpcHash
+        };
+        db.AmiiboRewards.Add(new AmiiboReward
+        {
+            Amiibo = anyAmiibo,
+            Reward = hintSearch,
+            Pool = "HintSearch",
+            Probability = 0,
+            DropSourcePath = amiiboNpcSource,
+            DropSourceSha256 = amiiboNpcHash,
+            InteractionKind = InteractionKind.Special,
+            OutcomeKind = OutcomeKind.Event
+        });
+
+        await db.SaveChangesAsync();
+        var localized = await ImportOdysseyLocalizationAsync(romFs, game.Id, db);
+
+        run.Status = bundles.Count > 0 ? ImportStatus.Succeeded : ImportStatus.SucceededWithWarnings;
+        run.FinishedAt = DateTimeOffset.UtcNow;
+        run.Summary = $"{rules.Select(x => (x.Rule.CharacterId, x.Rule.NumberingId, x.Rule.ItemName)).Distinct().Count()} Odyssey amiibo rules; {bundles.Count} costume outcomes; {localized} localized outcomes; 1 hint-search interaction.";
+        await db.SaveChangesAsync();
+        log.LogInformation("{Summary}", run.Summary);
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        run.Status = ImportStatus.Failed;
+        run.FinishedAt = DateTimeOffset.UtcNow;
+        run.Summary = ex.Message;
+        await db.SaveChangesAsync();
+        log.LogError(ex, "ODYSSEY import failed");
+        return 1;
+    }
+}
+
+static IReadOnlyList<(OdysseyAmiiboRule Rule, string ComponentType, string SourceId)> ReadOdysseyRules(byte[] byml, string sourceId)
+{
+    if (BymlReader.ReadAny(byml) is not IReadOnlyList<object?> entries) throw new InvalidDataException($"{sourceId} root is not an array.");
+    var output = new List<(OdysseyAmiiboRule, string, string)>();
+    foreach (var entry in entries.OfType<IReadOnlyDictionary<string, object?>>())
+    {
+        var itemName = entry.GetValueOrDefault("ItemName")?.ToString();
+        if (string.IsNullOrWhiteSpace(itemName) || entry.GetValueOrDefault("Amiibo") is not IReadOnlyList<object?> amiiboRules) continue;
+        foreach (var value in amiiboRules.OfType<IReadOnlyDictionary<string, object?>>())
+        {
+            var characterId = Convert.ToUInt16(value.GetValueOrDefault("CharacterId") ?? 0);
+            int? numberingId = value.ContainsKey("NumberingId") ? Convert.ToInt32(value["NumberingId"]) : null;
+            output.Add((new OdysseyAmiiboRule(characterId, numberingId, itemName), Path.GetFileNameWithoutExtension(sourceId), sourceId));
+        }
+    }
+    return output;
+}
+
+static IReadOnlyDictionary<string, IReadOnlyList<OdysseyProgressionRoute>> ReadOdysseyProgression(byte[] byml)
+{
+    if (BymlReader.ReadAny(byml) is not IReadOnlyList<object?> entries) throw new InvalidDataException("ItemList.byml root is not an array.");
+    return entries.OfType<IReadOnlyDictionary<string, object?>>()
+        .Where(entry => entry.GetValueOrDefault("ItemName") is string)
+        .GroupBy(entry => (string)entry["ItemName"]!, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(
+            group => group.Key,
+            group => (IReadOnlyList<OdysseyProgressionRoute>)group.Select(entry => new OdysseyProgressionRoute(
+                entry.GetValueOrDefault("ItemType")?.ToString() ?? "Costume",
+                entry.ContainsKey("MoonNum") ? Convert.ToInt32(entry["MoonNum"]) : null,
+                entry.GetValueOrDefault("ClearWorld")?.ToString(),
+                entry.GetValueOrDefault("CoinType")?.ToString(),
+                Convert.ToInt32(entry.GetValueOrDefault("Price") ?? 0))).ToList(),
+            StringComparer.OrdinalIgnoreCase);
+}
+
+static async Task<int> ImportOdysseyLocalizationAsync(string romFs, Guid gameId, AmiiboRewardsDbContext db)
+{
+    var localeRoot = Path.Combine(romFs, "LocalizedData");
+    if (!Directory.Exists(localeRoot)) return 0;
+    var rewards = await db.Rewards.Where(x => x.GameId == gameId).ToListAsync();
+    var localized = 0;
+    foreach (var directory in Directory.EnumerateDirectories(localeRoot).OrderBy(x => x, StringComparer.Ordinal))
+    {
+        var locale = Path.GetFileName(directory);
+        var messages = await OdysseyMessageCatalogReader.ReadAsync(romFs, locale);
+        foreach (var reward in rewards)
+        {
+            string? name;
+            string? description;
+            string sourcePath;
+            if (reward.RewardType == RewardType.CostumeUnlock)
+            {
+                var cap = messages.FirstOrDefault(x => Path.GetFileName(x.MsbtPath).Equals("ItemCap.msbt", StringComparison.OrdinalIgnoreCase) && x.Label == reward.InternalId);
+                var clothes = messages.FirstOrDefault(x => Path.GetFileName(x.MsbtPath).Equals("ItemCloth.msbt", StringComparison.OrdinalIgnoreCase) && x.Label == reward.InternalId);
+                var capDescription = messages.FirstOrDefault(x => Path.GetFileName(x.MsbtPath).Equals("ItemCap.msbt", StringComparison.OrdinalIgnoreCase) && x.Label == reward.InternalId + "_Explain")?.Text;
+                var clothesDescription = messages.FirstOrDefault(x => Path.GetFileName(x.MsbtPath).Equals("ItemCloth.msbt", StringComparison.OrdinalIgnoreCase) && x.Label == reward.InternalId + "_Explain")?.Text;
+                name = JoinDistinct(" + ", cap?.Text, clothes?.Text);
+                description = JoinDistinct("\n\n", capDescription, clothesDescription);
+                sourcePath = $"LocalizedData/{locale}/MessageData/SystemMessage.szs::ItemCap.msbt;ItemCloth.msbt";
+            }
+            else
+            {
+                name = messages.FirstOrDefault(x => Path.GetFileName(x.MsbtPath).Equals("CharacterName.msbt", StringComparison.OrdinalIgnoreCase) && x.Label == "AmiiboNpc")?.Text;
+                description = JoinDistinct("\n\n",
+                    messages.FirstOrDefault(x => Path.GetFileName(x.MsbtPath).Equals("AmiiboNpc.msbt", StringComparison.OrdinalIgnoreCase) && x.Label == "Talk00")?.Text,
+                    messages.FirstOrDefault(x => Path.GetFileName(x.MsbtPath).Equals("AmiiboNpc.msbt", StringComparison.OrdinalIgnoreCase) && x.Label == "Talk06")?.Text);
+                sourcePath = $"LocalizedData/{locale}/MessageData/SystemMessage.szs::CharacterName.msbt;AmiiboNpc.msbt";
+            }
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var sourceHash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(string.Join('\n', messages.Select(x => $"{x.MsbtPath}:{x.Label}:{x.Text}"))))).ToLowerInvariant();
+            db.RewardLocalizations.Add(new RewardLocalization { RewardId = reward.Id, Locale = locale, Name = name, Description = description, SourcePath = sourcePath, SourceSha256 = sourceHash });
+            localized++;
+        }
+    }
+    return localized;
+}
+
+static string? JoinDistinct(string separator, params string?[] values)
+{
+    var present = values.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).ToList();
+    return present.Count == 0 ? null : string.Join(separator, present);
+}
+
+static IEnumerable<IReadOnlyDictionary<string, object?>> EnumerateBymlMaps(object? value)
+{
+    if (value is IReadOnlyDictionary<string, object?> map)
+    {
+        yield return map;
+        foreach (var child in map.Values)
+            foreach (var nested in EnumerateBymlMaps(child))
+                yield return nested;
+    }
+    else if (value is IReadOnlyList<object?> list)
+    {
+        foreach (var child in list)
+            foreach (var nested in EnumerateBymlMaps(child))
+                yield return nested;
+    }
+}
+
+static string OdysseySelectorDisplayName(OdysseyAmiiboRule rule) => rule.NumberingId is int numberingId ? $"Amiibo #{numberingId}" : $"Familia amiibo {rule.CharacterId}";
 static async Task<int> ImportTotkRomFsAsync(string romFs, string locale, AmiiboRewardsDbContext db, ILogger log)
 {
     var profile = GameProfiles.Totk; var index = RomFsIndex.Create(romFs); var adapter = new TotkAmiiboInteractionAdapter();

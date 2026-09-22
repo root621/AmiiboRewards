@@ -6,6 +6,7 @@ namespace AmiiboRewards.Domain;
 public sealed record AmiiboIdentity(byte[] CharacterId, byte SeriesId, ushort NumberingId, byte NfpType, byte Version)
 {
     public byte[] CharacterBaseId => CharacterId.Length >= 2 ? CharacterId[..2] : [];
+    public ushort CharacterIdAsUInt16 => CharacterId.Length >= 2 ? BinaryPrimitives.ReadUInt16LittleEndian(CharacterId.AsSpan(0, 2)) : (ushort)0;
     public static AmiiboIdentity Read(ReadOnlySpan<byte> dump)
     {
         const int offset = 0x54;

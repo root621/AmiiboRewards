@@ -9,13 +9,19 @@ namespace AmiiboRewards.Domain;
 /// </summary>
 public static class BymlReader
 {
-    public static IReadOnlyDictionary<string, object?> Read(ReadOnlySpan<byte> bytes)
+    public static object? ReadAny(ReadOnlySpan<byte> bytes)
     {
         if (bytes.Length < 0x10 || !bytes[..2].SequenceEqual("YB"u8)) throw new InvalidDataException("Expected little-endian BYML.");
-        if (BinaryPrimitives.ReadUInt16LittleEndian(bytes[2..]) != 7) throw new InvalidDataException("Expected BYML v7.");
+        var version = BinaryPrimitives.ReadUInt16LittleEndian(bytes[2..]);
+        if (version is not (3 or 7)) throw new InvalidDataException($"Unsupported BYML version {version}.");
         var keys = ReadStringTable(bytes, Offset(bytes, 4));
         var strings = ReadStringTable(bytes, Offset(bytes, 8));
-        var root = ReadNode(bytes, Offset(bytes, 12), keys, strings);
+        return ReadNode(bytes, Offset(bytes, 12), keys, strings);
+    }
+
+    public static IReadOnlyDictionary<string, object?> Read(ReadOnlySpan<byte> bytes)
+    {
+        var root = ReadAny(bytes);
         return root as IReadOnlyDictionary<string, object?> ?? throw new InvalidDataException("BYML root is not a hash.");
     }
 

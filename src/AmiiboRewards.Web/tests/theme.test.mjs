@@ -12,6 +12,11 @@ test('BOTW keeps the forest defaults while TOTK overrides shared accents with co
   assert.match(css, /\.reward-card \{[^}]*var\(--card-line\)/)
 })
 
+test('Odyssey uses its own Cappy red theme without changing BOTW or TOTK tokens', () => {
+  assert.match(css, /:root\[data-game-theme="plum"\] \{[\s\S]*--green: #ef8b91[\s\S]*--category-active-line: #a84d58/)
+  assert.match(css, /:root\[data-game-theme="plum"\] \.game-banner\.no-art \{[^}]*#8b3039/)
+})
+
 test('the selected game theme controls the document root', () => {
   assert.match(app, /document\.documentElement\.dataset\.gameTheme = selectedTheme/)
 })
