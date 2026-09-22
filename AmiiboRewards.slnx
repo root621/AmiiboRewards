@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AmiiboRewards.Api/AmiiboRewards.Api.csproj" />
+    <Project Path="src/AmiiboRewards.Application/AmiiboRewards.Application.csproj" />
+    <Project Path="src/AmiiboRewards.Domain/AmiiboRewards.Domain.csproj" />
+    <Project Path="src/AmiiboRewards.Infrastructure/AmiiboRewards.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AmiiboRewards.Application.Tests/AmiiboRewards.Application.Tests.csproj" />
+    <Project Path="tests/AmiiboRewards.Domain.Tests/AmiiboRewards.Domain.Tests.csproj" />
+    <Project Path="tests/AmiiboRewards.IntegrationTests/AmiiboRewards.IntegrationTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/AmiiboRewards.Tools.Assets/AmiiboRewards.Tools.Assets.csproj" />
+    <Project Path="tools/AmiiboRewards.Tools.Botw/AmiiboRewards.Tools.Botw.csproj" />
+  </Folder>
+</Solution>
