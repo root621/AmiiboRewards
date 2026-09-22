@@ -58,9 +58,14 @@ app.MapPost("/api/dumps/import", async (DumpImportRequest request, IWebHostEnvir
     var project = Path.Combine(repoRoot, "tools", "AmiiboRewards.Tools.Botw", "AmiiboRewards.Tools.Botw.csproj");
     if (!File.Exists(project)) return Results.Problem("No se encontró el importador BOTW configurado.");
     var start = new ProcessStartInfo("dotnet") { WorkingDirectory = repoRoot, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
-    var command = code == "TOTK" ? new[] { "run", "--project", project, "--", "import-totk-romfs" } : new[] { "run", "--project", project, "--", "import-romfs", request.Locale! };
+    var command = code switch
+    {
+        "TOTK" => new[] { "run", "--project", project, "--", "import-totk-romfs" },
+        "ODYSSEY" => new[] { "run", "--project", project, "--", "import-odyssey-romfs", request.Locale ?? "USen" },
+        _ => new[] { "run", "--project", project, "--", "import-romfs", request.Locale! }
+    };
     foreach (var argument in command) start.ArgumentList.Add(argument);
-    start.Environment[code == "TOTK" ? "AMIIBOREWARDS_Totk__RomFsPath" : "AMIIBOREWARDS_Botw__RomFsPath"] = dump;
+    start.Environment[code switch { "TOTK" => "AMIIBOREWARDS_Totk__RomFsPath", "ODYSSEY" => "AMIIBOREWARDS_Odyssey__RomFsPath", _ => "AMIIBOREWARDS_Botw__RomFsPath" }] = dump;
     start.Environment["AMIIBOREWARDS_ConnectionStrings__AmiiboRewards"] = configuration.GetConnectionString("AmiiboRewards") ?? "Host=localhost;Port=5432;Database=amiibo_rewards;Username=amiibo;Password=amiibo";
     var process = Process.Start(start);
     if (process is null) return Results.Problem("No se pudo iniciar la importación.");
@@ -82,6 +87,8 @@ app.MapGet("/api/rewards/catalog", async (string? locale, string? game, AmiiboRe
     var rewards = await db.Rewards.AsNoTracking().Where(r => r.Game!.Code == (game ?? "BOTW").ToUpperInvariant()).OrderBy(r => r.InternalId).Select(r => new
     {
         r.InternalId,
+        r.RewardType,
+        r.Metadata,
         Name = r.Localizations.Where(l => l.Locale == selectedLocale).Select(l => l.Name).FirstOrDefault() ?? r.Name,
         Description = r.Localizations.Where(l => l.Locale == selectedLocale).Select(l => l.Description).FirstOrDefault() ?? r.Description,
         IconPath = r.IconAsset == null ? null : r.IconAsset.OutputPath,
@@ -123,7 +130,7 @@ app.MapGet("/api/rewards/catalog", async (string? locale, string? game, AmiiboRe
                 ar.MappingStatus,
                 ar.Pool,
                 ar.Probability,
-                NormalizedProbability = ar.Probability,
+                NormalizedProbability = ar.InteractionKind == InteractionKind.Drop ? ar.Probability : (decimal?)null,
                 ar.RawWeight,
                 ar.MinCount,
                 ar.MaxCount,
@@ -135,10 +142,10 @@ app.MapGet("/api/rewards/catalog", async (string? locale, string? game, AmiiboRe
                 ar.SpecialMetadata
             });
         }).ToList();
-        return new { r.InternalId, r.Name, r.Description, r.IconPath, AmiiboCount = amiibo.Select(x => x.AmiiboDisplayName).Distinct(StringComparer.OrdinalIgnoreCase).Count(), Amiibo = amiibo };
+        return new { r.InternalId, r.RewardType, r.Metadata, r.Name, r.Description, r.IconPath, AmiiboCount = amiibo.Select(x => x.AmiiboDisplayName).Distinct(StringComparer.OrdinalIgnoreCase).Count(), Amiibo = amiibo };
     }).ToList();
 
-    return Results.Ok(projected.Select(r => new { r.InternalId, r.Name, r.Description, r.IconPath, r.AmiiboCount, category = CatalogCategory(r.InternalId), r.Amiibo }));
+    return Results.Ok(projected.Select(r => new { r.InternalId, r.Name, r.Description, r.Metadata, r.IconPath, r.AmiiboCount, category = CatalogCategory(r.InternalId, r.RewardType), r.Amiibo }));
 });
 app.MapGet("/api/admin/imports", async (string? game, HttpRequest request, AmiiboRewardsDbContext db, IConfiguration configuration, CancellationToken ct) =>
 {
@@ -153,7 +160,13 @@ app.MapGet("/api/assets/{game}/{asset}", (string game, string asset, IWebHostEnv
     var file = Path.Combine(root, "icons", asset + ".png"); return File.Exists(file) ? Results.File(file, "image/png") : Results.NotFound();
 });
 app.Run();
-static string CatalogCategory(string id) => id switch
+static string CatalogCategory(string id, RewardType rewardType) => rewardType switch
+{
+    RewardType.CostumeUnlock => "Trajes / Atuendos",
+    RewardType.Event => "Interacciones amiibo",
+    _ => CatalogItemCategory(id)
+};
+static string CatalogItemCategory(string id) => id switch
 {
     _ when id.StartsWith("Weapon_Bow_", StringComparison.Ordinal) => "Arcos",
     _ when id.StartsWith("Weapon_Shield_", StringComparison.Ordinal) => "Escudos",
