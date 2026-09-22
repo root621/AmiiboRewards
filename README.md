@@ -8,10 +8,10 @@ La solución separa `Domain` (modelo, aliases y Yaz0), `Application` (casos de u
 docker compose up -d
 dotnet tool restore
 dotnet tool run dotnet-ef database update --project src/AmiiboRewards.Infrastructure --startup-project src/AmiiboRewards.Api
-dotnet run --project src/AmiiboRewards.Api --urls http://localhost:5000
+dotnet run --project src/AmiiboRewards.Api
 ```
 
-En otra terminal: `cd src/AmiiboRewards.Web && npm run dev`.
+La API queda en `http://localhost:5091` (perfil `http` de `launchSettings.json`). En otra terminal: `cd src/AmiiboRewards.Web && npm run dev`, que sirve la web en `http://localhost:5175` y proxya `/api` hacia el backend (target configurable con `VITE_API_PROXY_TARGET`, ver `.env.example`).
 
 La carpeta de dumps se configura desde el panel **Carpeta de dumps** de la web y queda guardada en PostgreSQL. Solo se aceptan RomFS extraídas; por ejemplo:
 
