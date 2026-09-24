@@ -11,6 +11,15 @@ builder.Services.AddScoped<IRewardSearchService, EfRewardSearchService>();
 builder.Services.AddScoped<GameLibrary>();
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod()));
 var app = builder.Build();
+
+// A cloned project must be able to start with an empty PostgreSQL volume. Running
+// migrations here also keeps local and containerized starts on the same schema.
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AmiiboRewardsDbContext>();
+    await db.Database.MigrateAsync();
+}
+
 app.UseCors();
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
 app.MapGet("/api/games", async (GameLibrary library, IWebHostEnvironment environment, CancellationToken ct) =>

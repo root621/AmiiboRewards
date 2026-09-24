@@ -6,4 +6,4 @@ dist/
 *.user
 appsettings.Development.json
 tools/AmiiboRewards.Tools.Assets/appsettings.Development.json
-assets/
+dumps/

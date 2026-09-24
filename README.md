@@ -4,6 +4,24 @@ Aplicación de búsqueda de recompensas de amiibo de *Breath of the Wild*, con i
 
 La solución separa `Domain` (modelo, aliases y Yaz0), `Application` (casos de uso), `Infrastructure` (EF/PostgreSQL), `Api`, `Web` (React/Vite) y herramientas para BOTW y assets.
 
+## Arranque desde un clon
+
+El proyecto completo se levanta con un único comando, igual en Windows, Linux y macOS:
+
+```bash
+docker compose up --build
+```
+
+Requiere únicamente [Docker Desktop](https://www.docker.com/products/docker-desktop/) (o Docker Engine con el plugin Compose). La primera ejecución descarga las imágenes y puede tardar unos minutos. Después abre `http://localhost:8080`.
+
+El comando crea PostgreSQL desde el dump incluido (con los datos ya cargados de BOTW, TOTK y Odyssey), aplica automáticamente las migraciones de EF Core, inicia la API y publica la web detrás del mismo origen. Para detenerlo, usa `Ctrl+C`; para ejecutarlo en segundo plano, `docker compose up --build -d`. Los datos de PostgreSQL permanecen en el volumen Docker `postgres-data`.
+
+El repositorio incluye los assets necesarios y la base inicial; no se requiere ninguna RomFS para usar la aplicación. `dumps/` continúa siendo una carpeta local opcional e ignorada por Git, únicamente para futuras importaciones. Para borrar también la base local y volver a cargar el dump incluido, ejecuta `docker compose down -v` y luego `docker compose up --build`.
+
+> No subas archivos de juegos, dumps ni credenciales al repositorio. El `docker-compose.yml` usa credenciales de desarrollo exclusivamente. PostgreSQL no se expone al host: la aplicación es accesible por `http://localhost:8080`.
+
+### Desarrollo sin contenedores
+
 ```bash
 docker compose up -d
 dotnet tool restore

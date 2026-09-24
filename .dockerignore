@@ -1,0 +1,8 @@
+.git
+.vs
+**/bin
+**/obj
+src/AmiiboRewards.Web/node_modules
+src/AmiiboRewards.Web/dist
+assets
+dumps
