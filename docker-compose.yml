@@ -5,7 +5,39 @@ services:
       POSTGRES_DB: amiibo_rewards
       POSTGRES_USER: amiibo
       POSTGRES_PASSWORD: amiibo
-    ports: ["5432:5432"]
-    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    # The bundled seed is evaluated only when Docker creates a new volume.
+    # Existing local databases are never overwritten by it.
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/amiibo_rewards.sql:/docker-entrypoint-initdb.d/01-amiibo_rewards.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amiibo -d amiibo_rewards"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: src/AmiiboRewards.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__AmiiboRewards: Host=postgres;Port=5432;Database=amiibo_rewards;Username=amiibo;Password=amiibo
+      DumpsRootPath: /workspace/dumps
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./dumps:/workspace/dumps
+      - ./assets:/workspace/assets:ro
+
+  web:
+    build:
+      context: .
+      dockerfile: src/AmiiboRewards.Web/Dockerfile
+    depends_on:
+      - api
+    ports: ["8080:80"]
 volumes:
   postgres-data:
